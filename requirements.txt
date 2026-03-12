@@ -3,3 +3,4 @@ streamlit-js-eval
 folium
 streamlit-folium
 pandas
+mysql-connector-python
