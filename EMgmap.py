@@ -1,61 +1,51 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-def show_road_route_map():
-    # Leaflet and Leaflet Routing Machine implementation
+def show_current_location_map():
+    # Simple Leaflet implementation to show ONLY current location
     html_code = """
     <!DOCTYPE html>
     <html>
     <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
     <style>
         #map { height: 500px; width: 100%; border-radius: 10px; }
-        body { font-family: sans-serif; }
+        body { font-family: sans-serif; margin: 0; }
     </style>
     </head>
     <body>
-    <p id="status">📡 Requesting GPS access...</p>
+    <p id="status" style="padding: 10px;">📡 Detecting your location...</p>
     <div id="map"></div>
 
     <script>
-    const destination = [16.704987, 74.243252]; // Kolhapur Bus Stand
-
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         function(position) {
-          const userLat = position.coords.latitude;
-          const userLon = position.coords.longitude;
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
 
-          document.getElementById("status").innerHTML = 
-            "<b>Route Found:</b> From your location to Kolhapur Bus Stand";
+          document.getElementById("status").innerHTML = "📍 <b>Current Location:</b> " + lat.toFixed(5) + ", " + lon.toFixed(5);
 
-          var map = L.map('map').setView(destination, 13);
+          var map = L.map('map').setView([lat, lon], 16);
 
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
           }).addTo(map);
 
-          // Routing logic
-          L.Routing.control({
-            waypoints: [
-              L.latLng(userLat, userLon),
-              L.latLng(destination[0], destination[1])
-            ],
-            routeWhileDragging: false,
-            addWaypoints: false,
-            show: true // Set to true to see turn-by-turn directions
-          }).addTo(map);
+          // Add a marker for the current location
+          L.marker([lat, lon]).addTo(map)
+            .bindPopup('You are here')
+            .openPopup();
         },
         function(error) {
           document.getElementById("status").innerHTML = "❌ Error: " + error.message;
         }
       );
     } else {
-      document.getElementById("status").innerHTML = "❌ Geolocation not supported";
+      document.getElementById("status").innerHTML = "❌ Geolocation not supported by this browser";
     }
     </script>
     </body>
@@ -63,11 +53,8 @@ def show_road_route_map():
     """
     components.html(html_code, height=600)
 
-# Streamlit UI
-st.title("📍 Real-time Navigation")
-st.info("Allow browser location permissions to see the route.")
+# Streamlit App UI
+st.title("📍 Current Location Map")
+st.write("This map will pinpoint your exact location once permissions are granted.")
 
-if st.button("Reload Map"):
-    st.rerun()
-
-show_road_route_map()
+show_current_location_map()
