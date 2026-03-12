@@ -130,7 +130,7 @@ def show_live_map():
     components.html(html_code, height=600)
 
 # --- Main App ---
-st.title("🛰️ Smart Parking: Live Locator")
+st.title("🛰️ Live Locator")
 st.markdown("""
     This module fetches your browser's GPS coordinates and updates your position 
     on the map every **5 seconds**. 
