@@ -4,3 +4,4 @@ folium
 streamlit-folium
 pandas
 mysql-connector-python
+streamlit-autorefresh
