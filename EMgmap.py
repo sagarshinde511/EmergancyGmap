@@ -1,99 +1,148 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import mysql.connector
 
-# ================= DATABASE CONFIG =================
-DB_CONFIG = {
-    "host": "82.180.143.66",
-    "user": "u263681140_students",
-    "password": "testStudents@123",
-    "database": "u263681140_students"
-}
+# Page Config
+st.set_page_config(page_title="Live GPS Tracker", page_icon="📍")
 
-def update_db_location(lat, lon):
-    try:
-        conn = mysql.connector.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        # Updating row with id=1 (Emergency Vehicle)
-        query = "UPDATE EmerVehicle SET Lat = %s, Lon = %s WHERE id = 1"
-        cursor.execute(query, (str(lat), str(lon)))
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        st.error(f"DB Error: {e}")
-        return False
-
-# ================= UI & LOGIC =================
-st.title("🚑 Emergency Vehicle Tracker")
-
-# 1. This hidden component executes JS and sends data back to Streamlit
-# We use a unique key to prevent unnecessary re-renders
-location_data = components.html(
+def show_live_map():
     """
-    <script>
-    function sendLocation() {
-        navigator.geolocation.getCurrentPosition((pos) => {
-            const lat = pos.coords.latitude;
-            const lon = pos.coords.longitude;
-            
-            // Send data to Streamlit
-            window.parent.postMessage({
-                type: 'streamlit:setComponentValue',
-                value: {lat: lat, lon: lon, timestamp: Date.now()}
-            }, '*');
-        });
-    }
-
-    // Initial send
-    sendLocation();
-    // Repeat every 5 seconds
-    setInterval(sendLocation, 5000);
-    </script>
-    """,
-    height=0,
-)
-
-# 2. Capture data from the JavaScript "postMessage"
-# Note: In standard Streamlit, we check query params or session state for the return value
-# For this specific implementation, we'll use a listener approach or a button-less update
-
-if "last_lat" not in st.session_state:
-    st.session_state.last_lat = None
-
-# Using a placeholder to show status
-status_placeholder = st.empty()
-
-# For a seamless update, we can use a query param trick or a simple button 
-# But for 'auto' update without refreshing UI, we use the following:
-
-st.info("The system is tracking your location and updating the 'EmerVehicle' table every 5 seconds.")
-
-# Logic to handle the incoming JS data
-# Since components.html doesn't return values directly to variables easily, 
-# we often use a small custom component or streamlit-js-eval.
-# Here is the robust version using streamlit-js-eval:
-
-from streamlit_js_eval import streamlit_js_eval
-
-loc = streamlit_js_eval(
-    js_expressions="done(navigator.geolocation.getCurrentPosition(pos => done({lat:pos.coords.latitude, lon:pos.coords.longitude})))",
-    key="track",
-    want_output=True
-)
-
-if loc:
-    lat, lon = loc['lat'], loc['lon']
-    success = update_db_location(lat, lon)
-    if success:
-        status_placeholder.success(f"✅ Database Updated: Lat {lat}, Lon {lon}")
+    Injects HTML/JavaScript to render a Leaflet map that 
+    auto-updates the user's position every 5 seconds.
+    """
     
-    # Simple Map Display
-    st.map({
-        'latitude': [float(lat)],
-        'longitude': [float(lon)]
-    })
+    html_code = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Live Location</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        
+        <style>
+            #map { 
+                height: 500px; 
+                width: 100%; 
+                border-radius: 12px; 
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+            #status-bar {
+                background: #f0f2f6;
+                padding: 10px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+                font-size: 14px;
+                color: #31333F;
+                display: flex;
+                justify-content: space-between;
+            }
+            .loading-pulse {
+                height: 10px;
+                width: 10px;
+                background: #ff4b4b;
+                border-radius: 50%;
+                display: inline-block;
+                animation: pulse 1.5s infinite;
+            }
+            @keyframes pulse {
+                0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 75, 75, 0.7); }
+                70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 75, 75, 0); }
+                100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 75, 75, 0); }
+            }
+        </style>
+    </head>
+    <body>
 
-# Auto-refresh the Streamlit script to catch the next JS interval
-from streamlit_autorefresh import st_autorefresh
-st_autorefresh(interval=5000, key="db_update_timer")
+    <div id="status-bar">
+        <span><span class="loading-pulse"></span> <b>GPS Status:</b> <span id="msg">Initializing...</span></span>
+        <span id="coords">0.00, 0.00</span>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        var map, marker, circle;
+        var firstLoad = true;
+
+        function updatePosition() {
+            if (!navigator.geolocation) {
+                document.getElementById("msg").innerHTML = "Not supported by browser";
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    document.getElementById("msg").innerHTML = "Live Tracking Active";
+                    document.getElementById("coords").innerHTML = lat.toFixed(5) + ", " + lon.toFixed(5);
+
+                    if (firstLoad) {
+                        // Initialize Map
+                        map = L.map('map').setView([lat, lon], 16);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '© OpenStreetMap contributors'
+                        }).addTo(map);
+
+                        // Custom Marker Icon
+                        var blueIcon = L.divIcon({
+                            className: 'custom-div-icon',
+                            html: "<div style='background-color:#007bff; width:15px; height:15px; border-radius:50%; border:2px solid white;'></div>",
+                            iconSize: [15, 15],
+                            iconAnchor: [7, 7]
+                        });
+
+                        marker = L.marker([lat, lon]).addTo(map).bindPopup("<b>You are here</b>").openPopup();
+                        circle = L.circle([lat, lon], { radius: accuracy, color: '#007bff', fillOpacity: 0.1 }).addTo(map);
+                        
+                        firstLoad = false;
+                    } else {
+                        // Update existing elements
+                        marker.setLatLng([lat, lon]);
+                        circle.setLatLng([lat, lon]);
+                        circle.setRadius(accuracy);
+                        
+                        // Optional: Smoothly follow the user
+                        map.panTo([lat, lon]);
+                    }
+                },
+                (error) => {
+                    document.getElementById("msg").innerHTML = "Error: " + error.message;
+                },
+                { enableHighAccuracy: true }
+            );
+        }
+
+        // Run immediately
+        updatePosition();
+
+        // Auto-refresh every 5 seconds (5000ms)
+        setInterval(updatePosition, 5000);
+    </script>
+    </body>
+    </html>
+    """
+    components.html(html_code, height=600)
+
+# --- Main App ---
+st.title("🛰️ Live Locator")
+st.markdown("""
+    This module fetches your browser's GPS coordinates and updates your position 
+    on the map every **5 seconds**. 
+""")
+
+with st.expander("ℹ️ Troubleshooting"):
+    st.write("1. Ensure you are using **HTTPS** or **localhost**.")
+    st.write("2. Click 'Allow' when the browser asks for Location permissions.")
+    st.write("3. If the map doesn't load, check your browser's address bar for blocked permissions.")
+
+# Display the map
+show_live_map()
+
+st.divider()
+st.caption("Developed for Smart Parking System | Powered by Leaflet.js")
