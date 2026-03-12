@@ -6,7 +6,7 @@ from streamlit_js_eval import streamlit_js_eval
 st.set_page_config(page_title="Live GPS Tracker", page_icon="📍")
 
 def show_live_map():
-    # Keep your HTML exactly as it was
+    # Your original HTML code (unchanged)
     html_code = """
     <!DOCTYPE html>
     <html>
@@ -14,7 +14,7 @@ def show_live_map():
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <style>
             #map { height: 500px; width: 100%; border-radius: 12px; }
-            #status-bar { background: #f0f2f6; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+            #status-bar { background: #f0f2f6; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-family: sans-serif;}
         </style>
     </head>
     <body>
@@ -49,25 +49,28 @@ def show_live_map():
     """
     components.html(html_code, height=600)
 
+# --- MAIN APP ---
 st.title("🛰️ Live Locator")
 
-# --- FETCH FROM JS TO PYTHON ---
-# This line runs a small JS snippet to return the location to Python
-location_data = streamlit_js_eval(
+# 1. FETCH COORDINATES FROM JS TO PYTHON
+# This bridges the browser (JS) to your Streamlit script (Python)
+loc = streamlit_js_eval(
     js_expressions="navigator.geolocation.getCurrentPosition(pos => { "
-                   "window.parent.postMessage({type: 'streamlit:setComponentValue', "
-                   "value: {lat: pos.coords.latitude, lon: pos.coords.longitude}}, '*'); });",
-    key="get_location"
+                   "  window.parent.postMessage({type: 'streamlit:setComponentValue', "
+                   "  value: {lat: pos.coords.latitude, lon: pos.coords.longitude}}, '*'); "
+                   "});",
+    key='get_location'
 )
 
-# Print the values in Python if they exist
-if location_data:
-    st.subheader("Python Output")
-    col1, col2 = st.columns(2)
-    col1.metric("Latitude", location_data['lat'])
-    col2.metric("Longitude", location_data['lon'])
+# 2. PRINT COORDINATES USING PYTHON
+if loc:
+    st.success(f"**Python Variable Captured:**")
+    st.write(f"Latitude: `{loc['lat']}`")
+    st.write(f"Longitude: `{loc['lon']}`")
+    
+    # You can now use loc['lat'] for your database or logic
 else:
-    st.info("Waiting for GPS permission/signal...")
+    st.info("Waiting for GPS permission to update Python variables...")
 
 # Display the map
 show_live_map()
