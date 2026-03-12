@@ -1,38 +1,30 @@
 import streamlit as st
-import streamlit.components.v1 as components
+from streamlit_js_eval import streamlit_js_eval
+import folium
+from streamlit_folium import st_folium
 
-def get_location():
-    # JavaScript to fetch coordinates and send them to Streamlit
-    js_code = """
-    <script>
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            
-            // Send data back to Streamlit
-            window.parent.postMessage({
-                type: 'streamlit:setComponentValue',
-                value: {lat: lat, lon: lon}
-            }, '*');
-        },
-        (error) => {
-            window.parent.postMessage({
-                type: 'streamlit:setComponentValue',
-                value: {error: error.message}
-            }, '*');
-        }
-    );
-    </script>
-    """
-    # Use a small height so it doesn't take up space
-    return components.html(js_code, height=0)
+st.title("Auto-Loading Map & Location")
 
-st.title("📍 Real-time Geolocation")
+# JavaScript call to get geolocation
+location = streamlit_js_eval(
+    js_expressions="done(navigator.geolocation.getCurrentPosition(pos => { \
+        const {latitude, longitude} = pos.coords; \
+        done({latitude, longitude}); \
+    }))", 
+    want_output=True,
+    key="get_location"
+)
 
-if st.button("Get My Location"):
-    location_data = get_location()
-    st.info("Requesting permission...")
-
-# This listener catches the 'value' sent from the JS postMessage
-# Note: In a real app, you might use a custom component for better state management
+if location:
+    lat = location['latitude']
+    lon = location['longitude']
+    
+    st.success(f"Location found: {lat}, {lon}")
+    
+    # Create and display the map centered on the current location
+    m = folium.Map(location=[lat, lon], zoom_start=15)
+    folium.Marker([lat, lon], tooltip="You are here").add_to(m)
+    
+    st_folium(m, width=700, height=500)
+else:
+    st.info("Please allow location access in your browser to load the map.")
